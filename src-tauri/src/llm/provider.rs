@@ -422,6 +422,9 @@ pub trait LLMProvider: Send + Sync {
     /// Returns the name of this provider (e.g., "openai", "ollama")
     fn provider_name(&self) -> &str;
 
+    /// Prepare a local runtime after activation, before the first meeting question.
+    fn warm_up(&self) {}
+
     /// Lists available models for this provider
     async fn list_models(&self) -> Result<Vec<ModelInfo>, LLMError>;
 

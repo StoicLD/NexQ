@@ -51,6 +51,14 @@ npx tauri dev
 
 `npx tauri dev` runs the `beforeDevCommand` from `src-tauri/tauri.conf.json`: it stages ONNX Runtime with `scripts/fetch-onnxruntime.mjs` (downloaded once into `src-tauri/ort/`, checksum-verified, skipped when already present), starts Vite on port 5173, then compiles and launches the Rust app. The first build compiles whisper.cpp and takes several minutes; later builds are incremental.
 
+### Meeting answers with Codex CLI
+
+Sign in with ChatGPT using `codex login`. In **Settings → LLM**, select **Codex CLI**, then **Test Connection** and **Set Codex CLI as Active Provider**. The default model follows the CLI configuration. To pick a specific model, use **Load Models**. The first-run wizard also offers Codex under **Cloud Providers**.
+
+During a meeting, click **Assist** (Space) for a reference answer based on the selected transcript window. The answer appears incrementally in the meeting overlay. Click the active action again to stop it. Auto-Answer uses the same provider when enabled. Audio stays with the selected transcription provider. NexQ sends the assembled question, transcript text and enabled context to OpenAI through the CLI's ChatGPT login.
+
+The adapter uses `codex app-server` over stdio. Each answer gets an ephemeral thread with its own context. Selecting the provider prepares the CLI process while the user is reading or listening. The adapter forwards answer deltas using the existing request-scoped stream events.
+
 ## Everyday commands
 
 | Command | What it does |

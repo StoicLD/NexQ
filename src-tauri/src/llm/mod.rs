@@ -1,5 +1,6 @@
 pub mod anthropic;
 pub mod cli_agent;
+pub mod codex_cli;
 pub mod custom;
 pub mod gemini;
 pub mod gemini_cache;
@@ -28,6 +29,7 @@ pub enum ProviderType {
     Custom,
     /// The local Claude Code CLI on the user's own subscription login.
     ClaudeCli,
+    CodexCli,
 }
 
 impl ProviderType {
@@ -41,6 +43,7 @@ impl ProviderType {
             "gemini" => Ok(Self::Gemini),
             "openrouter" => Ok(Self::Openrouter),
             "custom" => Ok(Self::Custom),
+            "codex_cli" => Ok(Self::CodexCli),
             "claude_cli" => Ok(Self::ClaudeCli),
             _ => Err(LLMError::NotConfigured(format!(
                 "Unknown provider type: {}",
@@ -60,6 +63,7 @@ impl ProviderType {
             Self::Openrouter => "openrouter",
             Self::Custom => "custom",
             Self::ClaudeCli => "claude_cli",
+            Self::CodexCli => "codex_cli",
         }
     }
 
@@ -74,6 +78,7 @@ impl ProviderType {
             Self::Openrouter => "OpenRouter",
             Self::Custom => "Custom",
             Self::ClaudeCli => "Claude (subscription)",
+            Self::CodexCli => "Codex CLI (ChatGPT)",
         }
     }
 
@@ -86,7 +91,7 @@ impl ProviderType {
             Self::Groq => "https://api.groq.com/openai/v1",
             Self::Gemini => "https://generativelanguage.googleapis.com",
             Self::Openrouter => "https://openrouter.ai/api/v1",
-            Self::Custom | Self::ClaudeCli => "",
+            Self::Custom | Self::ClaudeCli | Self::CodexCli => "",
         }
     }
 
@@ -195,6 +200,7 @@ pub fn create_provider(config: &ProviderConfig) -> Result<Box<dyn LLMProvider>, 
         }
         // Needs no config: it reaches the session manager through the
         // `AppHandle` passed to every `stream_completion` call.
+        ProviderType::CodexCli => Box::new(codex_cli::CodexCliProvider::default()),
         ProviderType::ClaudeCli => Box::new(cli_agent::provider::ClaudeCliProvider::new()),
     };
 
@@ -227,6 +233,7 @@ impl LLMRouter {
         let provider_type = ProviderType::from_str(&config.provider_type)?;
         let provider = create_provider(&config).map_err(LLMError::NotConfigured)?;
 
+        provider.warm_up();
         self.active_provider = Some(Arc::new(TokioMutex::new(provider)));
         self.active_provider_type = Some(provider_type);
         Ok(())
@@ -282,6 +289,7 @@ impl LLMRouter {
             ProviderType::Openrouter,
             ProviderType::Custom,
             ProviderType::ClaudeCli,
+            ProviderType::CodexCli,
         ];
 
         all_types

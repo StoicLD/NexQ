@@ -130,6 +130,18 @@ describe("configStore: Claude CLI config", () => {
     );
   });
 
+  it("uses the Codex default with a ChatGPT login and clears it when switching away", async () => {
+    const store = await freshStore();
+    store.setState({ llmProvider: "ollama", llmModel: "llama3.2", lastModelByProvider: {} });
+    await store.getState().activateLLMProvider("codex_cli");
+    expect(store.getState().llmModel).toBe("default");
+    expect(invoke).toHaveBeenCalledWith("set_llm_provider", {
+      provider: JSON.stringify({ provider_type: "codex_cli" }),
+    });
+    await store.getState().activateLLMProvider("lm_studio");
+    expect(store.getState().llmModel).toBe("");
+  });
+
   it("a model the backend refuses is reported and not recorded", async () => {
     const store = await freshStore();
     store.setState({ llmProvider: "ollama", llmModel: "llama3.2", lastModelByProvider: { openai: "gpt-4o" } });

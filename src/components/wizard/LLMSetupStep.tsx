@@ -45,6 +45,13 @@ interface ProviderCard {
 
 const CLOUD_PROVIDERS: ProviderCard[] = [
   {
+    type: "codex_cli",
+    label: "Codex CLI",
+    description: "Send meeting text with your ChatGPT login",
+    icon: <Terminal className="h-5 w-5" />,
+    requiresKey: false,
+  },
+  {
     type: "anthropic",
     label: "Anthropic",
     description: "Claude Sonnet, Opus, Haiku",
@@ -141,6 +148,7 @@ export function LLMSetupStep({
 
   async function handleProviderSelect(provider: LLMProviderType) {
     setSelectedProvider(provider);
+    setApiKeyValue("");
     setSelectedModel("");
     setModels([]);
     setConnectionStatus("idle");
@@ -183,7 +191,7 @@ export function LLMSetupStep({
     } catch (err) {
       setConnectionStatus("error");
       setConnectionMessage(
-        err instanceof Error ? err.message : "Connection failed"
+        err instanceof Error ? err.message : String(err)
       );
     }
   }
@@ -472,7 +480,9 @@ export function LLMSetupStep({
         <div className="rounded-xl border border-border/20 bg-secondary/20 px-5 py-4">
           <p className="text-xs text-muted-foreground leading-relaxed">
             <span className="font-medium text-foreground">Tip: </span>
-            {hasLocalLLM
+            {selectedProvider === "codex_cli"
+              ? "Codex uses your ChatGPT login. Load models and select Codex default or a specific model to activate it."
+              : hasLocalLLM
               ? "For privacy and speed, we recommend using Ollama with llama3.2. Your conversations never leave your machine."
               : "For the best experience, we recommend Anthropic Claude. For local privacy, install Ollama and run it before starting NexQ."}
           </p>

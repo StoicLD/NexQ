@@ -36,6 +36,7 @@ const PROVIDER_DISPLAY: Record<
   LLMProviderType,
   { label: string; description: string; requiresKey: boolean; isLocal: boolean }
 > = {
+  codex_cli: { label: "Codex CLI", description: "Meeting text is sent through your ChatGPT login", requiresKey: false, isLocal: false },
   ollama: { label: "Ollama", description: "Local models via Ollama", requiresKey: false, isLocal: true },
   lm_studio: { label: "LM Studio", description: "Local models via LM Studio", requiresKey: false, isLocal: true },
   openai: { label: "OpenAI", description: "GPT-4o, GPT-4, etc.", requiresKey: true, isLocal: false },
@@ -50,7 +51,7 @@ const PROVIDER_DISPLAY: Record<
 };
 
 const ALL_PROVIDERS: LLMProviderType[] = [
-  "ollama", "lm_studio", "openai", "anthropic", "groq", "gemini", "openrouter", "custom",
+  "ollama", "lm_studio", "openai", "anthropic", "groq", "gemini", "openrouter", "custom", "codex_cli",
 ];
 
 // Filter out known embedding-only models
@@ -288,7 +289,7 @@ export function LLMSettings() {
       }
     } catch (err) {
       setConnectionStatus("error");
-      setConnectionMessage(err instanceof Error ? err.message : "Connection failed");
+      setConnectionMessage(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -323,7 +324,7 @@ export function LLMSettings() {
         }
       }
     } catch (err) {
-      setModelsError(err instanceof Error ? err.message : "Failed to load models");
+      setModelsError(err instanceof Error ? err.message : String(err));
     } finally {
       setModelsLoading(false);
     }
@@ -377,7 +378,7 @@ export function LLMSettings() {
 
       {/* Provider Selection */}
       <div className="rounded-xl border border-border/30 bg-card/50 p-5">
-        <h3 className="mb-3 text-sm font-semibold text-primary/80">API & local providers</h3>
+        <h3 className="mb-3 text-sm font-semibold text-primary/80">AI providers</h3>
         <div className="grid grid-cols-4 gap-2.5">
           {ALL_PROVIDERS.map((pType) => {
             const display = PROVIDER_DISPLAY[pType];

@@ -33,6 +33,7 @@ const LLM_LABELS: Record<string, string> = {
   openrouter: "OpenRouter",
   custom: "Custom",
   claude_cli: "Claude",
+  codex_cli: "Codex CLI",
 };
 
 export const STT_LABELS: Record<string, string> = {
@@ -96,6 +97,7 @@ const LLM_PROVIDER_OPTIONS: {
 }[] = [
   { value: "ollama", label: "Ollama", IconComponent: Monitor, requiresKey: false, isLocal: true },
   { value: "lm_studio", label: "LM Studio", IconComponent: Monitor, requiresKey: false, isLocal: true },
+  { value: "codex_cli", label: "Codex CLI", IconComponent: Cloud, requiresKey: false, isLocal: false },
   { value: "openai", label: "OpenAI", IconComponent: Cloud, requiresKey: true, isLocal: false },
   { value: "anthropic", label: "Anthropic", IconComponent: Cloud, requiresKey: true, isLocal: false },
   { value: "groq", label: "Groq", IconComponent: Zap, requiresKey: true, isLocal: false },

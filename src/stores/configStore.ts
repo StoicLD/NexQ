@@ -132,7 +132,7 @@ async function storedProviderConfig(provider: LLMProviderType): Promise<string> 
       const token = await getApiKey("custom").catch(() => null);
       if (token) config.auth_value = token;
     }
-  } else if (provider !== "claude_cli") {
+  } else if (provider !== "claude_cli" && provider !== "codex_cli") {
     const key = await getApiKey(provider).catch(() => null);
     if (key) config.api_key = key;
   }
@@ -549,9 +549,9 @@ export const useConfigStore = create<ConfigState>((set) => ({
     const model =
       provider === "claude_cli"
         ? useConfigStore.getState().claudeCliConfig.fast_model
-        : options.model || before.lastModelByProvider[provider] || "";
-    // Without a model, Claude's Fast model must not carry over to the new provider.
-    if (model || before.llmProvider === "claude_cli") {
+        : options.model || before.lastModelByProvider[provider] || (provider === "codex_cli" ? "default" : "");
+    // A CLI provider's model or default alias must not carry over to the next provider.
+    if (model || before.llmProvider === "claude_cli" || before.llmProvider === "codex_cli") {
       try {
         await ipc.setActiveModel(provider, model);
       } catch (e) {

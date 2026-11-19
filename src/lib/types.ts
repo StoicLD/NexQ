@@ -309,7 +309,8 @@ export type LLMProviderType =
   | "gemini"
   | "openrouter"
   | "custom"
-  | "claude_cli";
+  | "claude_cli"
+  | "codex_cli";
 
 /** Auth mode for a user-supplied (custom) LLM endpoint. */
 export type CustomLlmAuthType = "none" | "bearer" | "api_key";
