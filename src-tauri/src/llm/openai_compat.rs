@@ -95,6 +95,7 @@ impl LLMProvider for OpenAICompatClient {
                             id: id.clone(),
                             name: if name.is_empty() { id.clone() } else { name },
                             provider: self.config.provider_name.clone(),
+                            codex: None,
                             context_window: m
                                 .get("context_window")
                                 .and_then(|c| c.as_u64())

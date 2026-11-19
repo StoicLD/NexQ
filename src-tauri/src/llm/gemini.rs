@@ -134,6 +134,7 @@ impl LLMProvider for GeminiClient {
                             id,
                             name: display_name,
                             provider: "gemini".to_string(),
+                            codex: None,
                             context_window,
                         })
                     })

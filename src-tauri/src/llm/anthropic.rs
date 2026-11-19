@@ -55,6 +55,7 @@ impl From<ApiModel> for ModelInfo {
             name: m.display_name.unwrap_or_else(|| m.id.clone()),
             id: m.id,
             provider: "anthropic".to_string(),
+            codex: None,
             context_window: m.max_input_tokens,
         }
     }
@@ -84,6 +85,7 @@ impl AnthropicClient {
             id: id.to_string(),
             name: name.to_string(),
             provider: "anthropic".to_string(),
+            codex: None,
             context_window: Some(context),
         })
         .collect()

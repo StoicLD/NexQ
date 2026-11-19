@@ -248,6 +248,8 @@ pub struct ModelInfo {
     pub name: String,
     pub provider: String,
     pub context_window: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex: Option<super::codex_cli::ModelOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

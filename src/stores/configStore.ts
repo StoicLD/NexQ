@@ -99,7 +99,7 @@ const DEFAULT_HOTKEYS: HotkeyConfig = {
 // Singleton store instance, lazily initialized
 let storeInstance: Store | null = null;
 
-async function getStore(): Promise<Store> {
+export async function getConfigFile(): Promise<Store> {
   if (!storeInstance) {
     storeInstance = await load(STORE_FILE, { autoSave: true, defaults: {} });
   }
@@ -168,7 +168,7 @@ export const DEFAULT_ASSIST_SHORTCUT = "CmdOrCtrl+Shift+Space";
 
 export async function persistValue(key: string, value: unknown): Promise<void> {
   try {
-    const store = await getStore();
+    const store = await getConfigFile();
     await store.set(key, value);
   } catch (err) {
     console.error(`[configStore] Failed to persist "${key}":`, err);
@@ -950,7 +950,7 @@ export const useConfigStore = create<ConfigState>((set) => ({
   loadConfig: async () => {
     try {
       const alreadyLoaded = useConfigStore.getState()._loaded;
-      const store = await getStore();
+      const store = await getConfigFile();
 
       const theme = await store.get<ThemeMode>("theme");
       const sttProvider = await store.get<STTProviderType>("sttProvider");

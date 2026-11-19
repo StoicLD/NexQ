@@ -255,6 +255,7 @@ impl LLMProvider for CustomClient {
                                         .unwrap_or(&id)
                                         .to_string(),
                                     provider: "custom".to_string(),
+                                    codex: None,
                                     context_window: None,
                                 })
                             })
@@ -282,6 +283,7 @@ impl LLMProvider for CustomClient {
                                             id: name.clone(),
                                             name: name.clone(),
                                             provider: "custom".to_string(),
+                                            codex: None,
                                             context_window: None,
                                         })
                                     })

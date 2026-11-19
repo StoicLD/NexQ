@@ -235,6 +235,7 @@ impl LLMProvider for ClaudeCliProvider {
                     id: m.value,
                     name: m.display_name,
                     provider: "claude_cli".to_string(),
+                    codex: None,
                     context_window: None,
                 })
                 .collect());
@@ -245,6 +246,7 @@ impl LLMProvider for ClaudeCliProvider {
                 id: id.to_string(),
                 name: name.to_string(),
                 provider: "claude_cli".to_string(),
+                codex: None,
                 context_window: None,
             })
             .collect())

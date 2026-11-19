@@ -61,6 +61,7 @@ impl LLMProvider for OllamaClient {
                             id: name.clone(),
                             name: model_name,
                             provider: "ollama".to_string(),
+                            codex: None,
                             context_window: m
                                 .get("details")
                                 .and_then(|d| d.get("context_length"))

@@ -255,7 +255,15 @@ export interface AIResponse {
   scope_label?: string | null;
 }
 
+export interface CodexModelOptions {
+  model: string;
+  efforts: string[];
+  initial_effort: string;
+  fast_tier: string | null;
+}
+
 export interface ModelInfo {
+  codex?: CodexModelOptions;
   id: string;
   name: string;
   provider: string;

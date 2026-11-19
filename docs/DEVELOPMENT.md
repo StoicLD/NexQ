@@ -53,7 +53,7 @@ npx tauri dev
 
 ### Meeting answers with Codex CLI
 
-Sign in with ChatGPT using `codex login`. In **Settings → LLM**, select **Codex CLI**, then **Test Connection** and **Set Codex CLI as Active Provider**. The default model follows the CLI configuration. To pick a specific model, use **Load Models**. The first-run wizard also offers Codex under **Cloud Providers**.
+Sign in with ChatGPT using `codex login`. In **Settings → LLM**, select **Codex CLI**, then **Test Connection** and **Set Codex CLI as Active Provider**. The default model follows the CLI configuration. To pick a specific model, use **Load Models**. The first-run wizard also offers Codex under **Cloud Providers**. The model selector shows the reasoning levels and Fast availability reported by the signed-in CLI. **Speed** offers **Follow Codex default**, **Standard**, and **Fast** (higher usage). NexQ saves effort and speed per concrete model, including when the same model is selected via **Codex default**. Each new answer reads these settings. Existing installations start at low effort where available and inherit the CLI speed.
 
 During a meeting, click **Assist** (Space) for a reference answer based on the selected transcript window. The answer appears incrementally in the meeting overlay. Click the active action again to stop it. Auto-Answer uses the same provider when enabled. Audio stays with the selected transcription provider. NexQ sends the assembled question, transcript text and enabled context to OpenAI through the CLI's ChatGPT login.
 

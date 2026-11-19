@@ -15,6 +15,7 @@ import {
 import type { CustomLlmAuthType as CustomAuthType, LLMProviderType, ModelInfo, OpenRouterModel } from "../lib/types";
 import { OpenRouterModelCatalog } from "./openrouter/OpenRouterModelCatalog";
 import { ClaudeCliSettings, claudeTierLabel } from "./ClaudeCliSettings";
+import { CodexModelSettings } from "./CodexModelSettings";
 import { useAgentStore } from "../stores/agentStore";
 import {
   CheckCircle,
@@ -195,6 +196,16 @@ export function LLMSettings() {
     setModels([]);
     setOpenRouterModels([]);
     setModelsError("");
+    if (selectedProvider === "codex_cli") {
+      let active = true;
+      setModelsLoading(true);
+      listModels(JSON.stringify({ provider_type: selectedProvider }))
+        .then((list) => { if (active) setModels(list); })
+        .catch((e) => { if (active) setModelsError(String(e)); })
+        .finally(() => { if (active) setModelsLoading(false); });
+      return () => { active = false; };
+    }
+    setModelsLoading(false);
   }, [selectedProvider]);
 
   // Custom provider: load persisted base URL / auth type + stored token when the
@@ -248,8 +259,9 @@ export function LLMSettings() {
   };
 
   const handleProviderChange = (provider: LLMProviderType) => {
+    selectedRef.current = provider;
     setSelectedProvider(provider);
-    setSelectedModel("");
+    setSelectedModel(provider === "codex_cli" ? useConfigStore.getState().lastModelByProvider.codex_cli || "default" : "");
     setModels([]);
     setOpenRouterModels([]);
     setConnectionStatus("idle");
@@ -305,6 +317,7 @@ export function LLMSettings() {
         // Browsing only: the key is already stored, so this never touches the active provider
         // Use enriched OpenRouter endpoint
         const orModels = await listOpenRouterModels(true);
+        if (selectedRef.current !== selectedProvider) return;
         setOpenRouterModels(orModels);
         if (orModels.length === 0) {
           setModelsError("No text models found");
@@ -313,6 +326,7 @@ export function LLMSettings() {
         // Use generic model listing for other providers
         const configJson = buildProviderConfig();
         const modelList = await listModels(configJson);
+        if (selectedRef.current !== selectedProvider) return;
         const chatModels = filterChatModels(modelList);
         setModels(chatModels);
         if (chatModels.length === 0) {
@@ -324,9 +338,9 @@ export function LLMSettings() {
         }
       }
     } catch (err) {
-      setModelsError(err instanceof Error ? err.message : String(err));
+      if (selectedRef.current === selectedProvider) setModelsError(err instanceof Error ? err.message : String(err));
     } finally {
-      setModelsLoading(false);
+      if (selectedRef.current === selectedProvider) setModelsLoading(false);
     }
   };
 
@@ -589,6 +603,7 @@ export function LLMSettings() {
               </p>
             </div>
           )}
+          {selectedProvider === "codex_cli" && <CodexModelSettings models={models} model={selectedModel} />}
         </div>
       )}
 

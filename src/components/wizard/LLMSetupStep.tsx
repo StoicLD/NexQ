@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useConfigStore } from "../../stores/configStore";
+import { CodexModelSettings } from "../../settings/CodexModelSettings";
 import { useAgentStore } from "../../stores/agentStore";
 import { showToast } from "../../stores/toastStore";
 import {
@@ -473,6 +474,7 @@ export function LLMSetupStep({
                 </option>
               ))}
             </select>
+            {selectedProvider === "codex_cli" && <CodexModelSettings models={models} model={selectedModel} />}
           </div>
         )}
 
