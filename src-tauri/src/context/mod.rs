@@ -226,31 +226,33 @@ impl ContextManager {
         Ok(())
     }
 
-    /// Remove a context resource by its ID.
-    pub fn remove_file(&mut self, resource_id: &str) -> Result<(), String> {
-        // Find the resource
-        let idx = self
-            .resources
-            .iter()
-            .position(|r| r.id == resource_id)
-            .ok_or_else(|| format!("Resource not found: {}", resource_id))?;
-
-        let resource = self.resources.remove(idx);
-
-        // Remove the cached file from context directory
-        let file_path = Path::new(&resource.file_path);
-        if file_path.exists() {
-            if let Err(e) = fs::remove_file(file_path) {
-                log::warn!("Failed to remove context file: {}", e);
-            }
+    /// Remove only the managed copy and index for a confirmed resource.
+    pub fn remove_file(&mut self, id: &str, conn: Option<&rusqlite::Connection>) -> Result<bool, String> {
+        let Some(index) = self.resources.iter().position(|r| r.id == id) else {
+            return Ok(false);
+        };
+        let resource = &self.resources[index];
+        let path = Path::new(&resource.file_path);
+        if path.parent() != Some(self.context_dir.as_path()) {
+            return Err(format!("{} is outside the context directory", path.display()));
         }
 
-        // Remove from cache
-        self.cache.remove(resource_id);
-
-        log::info!("Removed context resource: {}", resource.name);
-
-        Ok(())
+        let tx = conn.map(|db| db.unchecked_transaction()).transpose().map_err(|e| e.to_string())?;
+        if let Some(tx) = &tx {
+            crate::db::rag::delete_chunks_by_file(tx, id)?;
+            tx.execute("DELETE FROM context_resources WHERE id = ?1", [id]).map_err(|e| e.to_string())?;
+        }
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("Could not remove {}: {}", resource.name, e)),
+        }
+        if let Some(tx) = tx {
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        self.resources.remove(index);
+        self.cache.remove(id);
+        Ok(true)
     }
 
     /// List all loaded context resources.
@@ -335,5 +337,59 @@ impl ContextManager {
             transcript_tokens,
             model_context_window,
         )
+    }
+}
+
+#[cfg(test)]
+mod removal_tests {
+    use super::*;
+    use crate::db::{context, migrations, rag};
+
+    #[test]
+    fn clearing_uploaded_sources_preserves_originals_and_transcript_index() {
+        let root = std::env::temp_dir().join(Uuid::new_v4().to_string());
+        let context_dir = root.join("context");
+        fs::create_dir_all(&context_dir).unwrap();
+        let original = root.join("wiki.md");
+        fs::write(&original, "wiki content").unwrap();
+        let mut manager = ContextManager {
+            context_dir, resources: vec![], cache: ResourceCache::new(), custom_instructions: "Speak Chinese".into(),
+        };
+        let file = manager.load_file(original.to_str().unwrap()).unwrap();
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        migrations::run(&db).unwrap();
+        db.execute("INSERT INTO context_resources (id,name,file_type,file_path,size_bytes,token_count,preview,loaded_at)
+                    VALUES (?1,'wiki.md','md',?2,11,3,'wiki','now')", [&file.id, &file.file_path]).unwrap();
+        for (chunk, owner, kind) in [("wiki", file.id.as_str(), "file"), ("speech", "meeting", "transcript")] {
+            rag::insert_chunks_batch(&db, &[rag::ChunkRecord {
+                chunk_id: chunk.into(), file_id: owner.into(), chunk_index: 0, text: chunk.into(),
+                token_count: 1, source_type: kind.into(),
+            }]).unwrap();
+            rag::store_embedding(&db, chunk, &[1]).unwrap();
+        }
+
+        // A failed disk deletion rolls back the index transaction and remains retryable.
+        fs::remove_file(&file.file_path).unwrap();
+        fs::create_dir(&file.file_path).unwrap();
+        assert!(manager.remove_file(&file.id, Some(&db)).is_err());
+        assert!(context::has_resource(&db, &file.id).unwrap());
+        assert!(manager.get_resources_context().contains("wiki content"));
+        fs::remove_dir(&file.file_path).unwrap();
+        fs::copy(&original, &file.file_path).unwrap();
+
+        assert!(manager.remove_file(&file.id, Some(&db)).unwrap());
+        assert!(!manager.remove_file(&file.id, Some(&db)).unwrap());
+        assert!(!context::has_resource(&db, &file.id).unwrap());
+        for table in ["rag_chunks", "rag_embeddings"] {
+            let remaining: String = db.query_row(&format!("SELECT chunk_id FROM {table}"), [], |row| row.get(0)).unwrap();
+            assert_eq!(remaining, "speech");
+            let count: i64 = db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap();
+            assert_eq!(count, 1);
+        }
+        assert!(manager.get_resources_context().is_empty());
+        assert_eq!(manager.get_custom_instructions(), "Speak Chinese");
+        assert!(!Path::new(&file.file_path).exists());
+        assert_eq!(fs::read_to_string(original).unwrap(), "wiki content");
+        fs::remove_dir_all(root).unwrap();
     }
 }

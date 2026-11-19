@@ -21,29 +21,26 @@ pub async fn load_context_file(
         .as_ref()
         .ok_or_else(|| "Context manager not initialized".to_string())?;
 
-    let resource = {
-        let mut ctx = ctx_mgr
-            .lock()
-            .map_err(|e| format!("Failed to lock context manager: {}", e))?;
-        ctx.load_file(&file_path)?
-    };
+    let mut ctx = ctx_mgr.lock().map_err(|e| e.to_string())?;
+    let resource = ctx.load_file(&file_path)?;
 
-    // Persist to DB so the resource survives app restarts
-    if let Some(db_arc) = state.database.as_ref() {
-        if let Ok(db_guard) = db_arc.lock() {
-            let db_res = crate::db::context::ContextResource {
-                id: resource.id.clone(),
-                name: resource.name.clone(),
-                file_type: resource.file_type.clone(),
-                file_path: resource.file_path.clone(),
-                size_bytes: resource.size_bytes as i64,
-                token_count: resource.token_count as i64,
-                preview: resource.preview.clone(),
-                loaded_at: resource.loaded_at.clone(),
-            };
-            if let Err(e) = crate::db::context::add_context_resource(db_guard.connection(), &db_res) {
-                log::warn!("Failed to persist context resource to DB: {}", e);
-            }
+    if let Some(db) = &state.database {
+        let record = crate::db::context::ContextResource {
+            id: resource.id.clone(),
+            name: resource.name.clone(),
+            file_type: resource.file_type.clone(),
+            file_path: resource.file_path.clone(),
+            size_bytes: resource.size_bytes as i64,
+            token_count: resource.token_count as i64,
+            preview: resource.preview.clone(),
+            loaded_at: resource.loaded_at.clone(),
+        };
+        let saved = db.lock().map_err(|e| e.to_string()).and_then(|db| {
+            crate::db::context::add_context_resource(db.connection(), &record).map_err(|e| e.to_string())
+        });
+        if let Err(error) = saved {
+            ctx.remove_file(&resource.id, None)?;
+            return Err(format!("Could not save {}: {}", resource.name, error));
         }
     }
 
@@ -56,27 +53,30 @@ pub async fn remove_context_file(
     resource_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let ctx_mgr = state
-        .context
-        .as_ref()
-        .ok_or_else(|| "Context manager not initialized".to_string())?;
+    remove_context_files(vec![resource_id], state).await
+}
 
-    {
-        let mut ctx = ctx_mgr
-            .lock()
-            .map_err(|e| format!("Failed to lock context manager: {}", e))?;
-        ctx.remove_file(&resource_id)?;
-    }
-
-    // Remove from DB (context record + RAG chunks)
-    if let Some(db_arc) = state.database.as_ref() {
-        if let Ok(db_guard) = db_arc.lock() {
-            let _ = crate::db::context::delete_context_resource(db_guard.connection(), &resource_id);
-            let _ = crate::db::rag::delete_chunks_by_file(db_guard.connection(), &resource_id);
+#[command]
+pub async fn remove_context_files(
+    resource_ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut ctx = state.context.as_ref().ok_or("Context manager not initialized")?
+        .lock().map_err(|e| e.to_string())?;
+    let db = state.database.as_ref().map(|db| db.lock()).transpose().map_err(|e| e.to_string())?;
+    let conn = db.as_ref().map(|db| db.connection());
+    let mut errors = Vec::new();
+    let mut removed = false;
+    for id in resource_ids {
+        match ctx.remove_file(&id, conn) {
+            Ok(changed) => removed |= changed,
+            Err(error) => errors.push(error),
         }
     }
-
-    Ok(())
+    if removed {
+        state.gemini_cache.lock().map_err(|e| e.to_string())?.take();
+    }
+    if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
 }
 
 #[command]

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import { CloudUpload, Loader2 } from "lucide-react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { listContextFolder } from "../lib/ipc";
+import { CloudUpload, Loader2, Trash2 } from "lucide-react";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { listContextFolder, removeContextFiles } from "../lib/ipc";
 import { useContextStore } from "../stores/contextStore";
 import { useConfigStore } from "../stores/configStore";
 import { useRagStore } from "../stores/ragStore";
@@ -11,15 +11,16 @@ export function FileUpload() {
   const contextStrategy = useConfigStore((s) => s.contextStrategy);
   const autoIndexFile = useRagStore((s) => s.autoIndexFile);
   const [isDragOver, setIsDragOver] = useState(false);
-  const importing = useRef(false);
+  const busy = useRef(false);
+  const sourceCount = useContextStore((s) => s.resources.length);
   const indexQueue = useRef(Promise.resolve());
   const [progress, setProgress] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function importFiles(source: "files" | "folder" | string[]) {
-    if (importing.current) return;
-    importing.current = true;
+    if (busy.current) return;
+    busy.current = true;
     setErrorMessage(null);
     setNotice(null);
     try {
@@ -69,7 +70,41 @@ export function FileUpload() {
       setErrorMessage(e instanceof Error ? e.message : String(e));
     } finally {
       setProgress(null);
-      importing.current = false;
+      busy.current = false;
+    }
+  }
+
+  async function clearSources() {
+    if (busy.current) return;
+    const ids = useContextStore.getState().resources.map((source) => source.id);
+    if (!ids.length) return;
+    busy.current = true;
+    const count = `${ids.length} uploaded ${ids.length === 1 ? "file" : "files"}`;
+    try {
+      if (!await confirm(`Remove ${count} from Meeting Context?`, {
+        title: "Clear all sources?", kind: "warning", okLabel: "Continue", cancelLabel: "Cancel",
+      })) return;
+      if (!await confirm(`Delete the imported copies and their search index for ${count}? Your original files stay on disk.`, {
+        title: "Confirm removal", kind: "warning", okLabel: "Clear all sources", cancelLabel: "Cancel",
+      })) return;
+
+      setNotice(null);
+      setErrorMessage(null);
+      setProgress("Clearing sources...");
+      try {
+        await removeContextFiles(ids);
+        setNotice(`Removed ${count}.`);
+      } finally {
+        await useContextStore.getState().loadResources();
+        const rag = useRagStore.getState();
+        rag.resetTestSearch();
+        await rag.refreshIndexStatus();
+      }
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      busy.current = false;
+      setProgress(null);
     }
   }
 
@@ -135,6 +170,19 @@ export function FileUpload() {
         )}
       </div>
 
+      {sourceCount > 0 && (
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            disabled={!!progress}
+            onClick={() => void clearSources()}
+            className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Clear all sources
+          </button>
+        </div>
+      )}
       {notice && <p role="status" className="mt-2 text-xs text-muted-foreground">{notice}</p>}
       {errorMessage && (
         <div role="alert" className="mt-2 max-h-28 overflow-auto whitespace-pre-line break-words rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">

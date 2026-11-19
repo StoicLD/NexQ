@@ -297,6 +297,10 @@ export async function loadContextFile(
   return JSON.parse(result);
 }
 
+export function removeContextFiles(resourceIds: string[]): Promise<void> {
+  return invoke("remove_context_files", { resourceIds });
+}
+
 export async function removeContextFile(resourceId: string): Promise<void> {
   return invoke("remove_context_file", { resourceId });
 }

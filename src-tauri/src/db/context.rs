@@ -42,6 +42,11 @@ pub fn add_context_resource(
     Ok(())
 }
 
+pub fn has_resource(conn: &Connection, id: &str) -> Result<bool, String> {
+    conn.query_row("SELECT EXISTS(SELECT 1 FROM context_resources WHERE id = ?1)", [id], |row| row.get(0))
+        .map_err(|e| e.to_string())
+}
+
 /// Get a single context resource by ID.
 pub fn get_context_resource(
     conn: &Connection,

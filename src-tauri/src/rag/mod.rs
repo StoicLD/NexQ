@@ -151,6 +151,9 @@ impl RagManager {
         // Phase 2: Insert chunks into DB (brief lock, no await)
         {
             let db_guard = db.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+            if !crate::db::context::has_resource(db_guard.connection(), file_id)? {
+                return Ok(0);
+            }
             rag_db::insert_chunks_batch(db_guard.connection(), &chunk_records)
                 .map_err(|e| format!("Failed to insert chunks for {}: {}", file_name, e))?;
         } // lock released before async work
@@ -191,6 +194,10 @@ impl RagManager {
         {
             let db_guard = db.lock().map_err(|e| format!("DB lock failed: {}", e))?;
             let conn = db_guard.connection();
+            // The source can be removed while the embedder is running.
+            if !crate::db::context::has_resource(conn, file_id)? {
+                return Ok(0);
+            }
             for (chunk_id, embedding_bytes) in &batch_embeddings {
                 rag_db::store_embedding(conn, chunk_id, embedding_bytes)
                     .map_err(|e| format!("Failed to store embedding: {}", e))?;

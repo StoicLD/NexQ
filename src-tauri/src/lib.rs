@@ -580,6 +580,7 @@ pub fn run() {
             context_commands::list_context_folder,
             context_commands::load_context_file,
             context_commands::remove_context_file,
+            context_commands::remove_context_files,
             context_commands::list_context_resources,
             context_commands::set_custom_instructions,
             context_commands::get_assembled_context,

@@ -77,8 +77,13 @@ pub async fn create_gemini_context_cache(
         cached.expire_time
     );
 
-    // Store in AppState
+    // An upload may have been cleared while the cache request was in flight.
     {
+        let ctx = state.context.as_ref().ok_or("Context manager not initialized")?
+            .lock().map_err(|e| e.to_string())?;
+        if ctx.get_assembled_context() != context_text {
+            return Err("Meeting Context changed while creating the cache".to_string());
+        }
         let mut cache_slot = state
             .gemini_cache
             .lock()
