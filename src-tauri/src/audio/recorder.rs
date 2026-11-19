@@ -100,7 +100,7 @@ fn get_recordings_dir() -> Result<PathBuf, String> {
         })
         .map_err(|e| format!("Failed to find app data directory: {}", e))?;
 
-    let recordings_dir = app_data.join("com.nexq.app").join("recordings");
+    let recordings_dir = app_data.join(crate::profile_paths::APP_ID).join("recordings");
 
     fs::create_dir_all(&recordings_dir)
         .map_err(|e| format!("Failed to create recordings directory: {}", e))?;

@@ -56,7 +56,7 @@ impl ContextManager {
     fn get_context_dir() -> PathBuf {
         if let Some(appdata) = std::env::var_os("APPDATA") {
             PathBuf::from(appdata)
-                .join("com.nexq.app")
+                .join(crate::profile_paths::APP_ID)
                 .join("context")
         } else {
             // Fallback for non-Windows or if APPDATA is not set

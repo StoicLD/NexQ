@@ -66,7 +66,7 @@ pub fn sandbox_dir() -> PathBuf {
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
-    base.join("NexQ").join("agent-sandbox")
+    base.join(crate::profile_paths::APP_NAME).join("agent-sandbox")
 }
 
 /// Apply cwd (created if missing), stripped env and CREATE_NO_WINDOW.

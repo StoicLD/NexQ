@@ -1,0 +1,15 @@
+{
+  "identifier": "com.nexq.dev",
+  "build": {
+    "devUrl": "http://127.0.0.1:15173",
+    "beforeDevCommand": "node scripts/fetch-onnxruntime.mjs && npm run dev -- --host 127.0.0.1 --port 15173 --strictPort",
+    "features": [
+      "windows-dev-profile"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  }
+}

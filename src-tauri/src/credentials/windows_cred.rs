@@ -11,7 +11,7 @@ use windows::Win32::Security::Credentials::{
 
 /// Format the credential target name.
 fn target_name(provider: &str) -> String {
-    format!("NexQ:{}", provider)
+    format!("{}:{}", crate::profile_paths::APP_NAME, provider)
 }
 
 /// Convert a Rust string to a null-terminated wide (UTF-16) string.

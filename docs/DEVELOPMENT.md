@@ -15,6 +15,22 @@ Everything you need to build, run, test and debug NexQ locally. For how the code
   ```
   `src-tauri/.cargo/config.toml` sets `LIBCLANG_PATH` to `C:\Program Files\LLVM\bin` and uses the Ninja generator, so `cmake` and `ninja` must be on `PATH`. Open a new terminal after installing.
 
+### Isolated Windows checkout (codex_support)
+
+From the repository root, run `NexQ-Dev.cmd` to start the desktop app with hot reload. From PowerShell use `.\NexQ-Dev.cmd`. Keep its terminal open while developing and press Ctrl+C there to stop. The launcher starts a child PowerShell with the project toolchain. It reads Node 24.18.0 from nvm-windows, uses its npm 12.2.0 and resolves Rust 1.99.1 through the repository toolchain file. If another project uses a different Node or Rust default, its terminal keeps that default.
+
+| Command | Purpose |
+| --- | --- |
+| `NexQ-Dev.cmd doctor` | Print the selected tools, SDK and build directory. |
+| `NexQ-Dev.cmd setup` | Run on a new checkout or after dependency changes. Install the npm lockfile, stage the checked ONNX Runtime and VC DLLs, and fetch Cargo dependencies. |
+| `NexQ-Dev.cmd check` | Build the frontend, run Vitest and check the Windows backend against Cargo.lock. |
+| `NexQ-Dev.cmd build` | Build a debug desktop executable with bundled frontend assets and runtime DLLs in `.dev/app/`. Stop the hot-reload process before rebuilding. |
+| `NexQ-Dev.cmd dev` | Start Vite on `127.0.0.1:15173` and open the Tauri development window. |
+
+This Windows profile selects VS 2022 with x64 MSVC 14.44.35207 and SDK 10.0.26100.0. The verified native tools are CMake 4.4.4, Ninja 1.13.2 and LLVM 23.1.4 with libclang. WebView2 follows the Windows installation. If Codex CLI is installed with the Codex desktop app, the launcher makes its executable available to child processes and `doctor` reports its version. Dependencies live under `node_modules/` and `src-tauri/ort/`; Cargo and npm reuse their download caches. Native build output stays under `.dev/t/`.
+
+The development launcher pairs a dedicated Tauri identifier with a Cargo feature for the remaining hardcoded Windows paths. Meetings, context files and recordings use `%APPDATA%\com.nexq.dev`, logs use `%LOCALAPPDATA%\com.nexq.dev\logs`, and the Windows credential prefix is `NexQDev:`. Use the launcher for both hot reload and standalone debug builds to select this profile.
+
 ### macOS (Apple Silicon)
 
 - Node.js 20 or newer and Rust stable

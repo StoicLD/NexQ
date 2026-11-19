@@ -9,6 +9,7 @@ pub mod rag;
 pub mod llm;
 pub mod meeting_detect;
 pub mod ort_runtime;
+mod profile_paths;
 pub mod state;
 pub mod stt;
 pub mod translation;
