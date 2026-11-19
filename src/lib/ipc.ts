@@ -286,6 +286,10 @@ export async function getActionConfigs(): Promise<AllActionConfigs> {
 
 // == IPC: Context (Sub-PRD 7) ==
 
+export function listContextFolder(folderPath: string): Promise<{ files: string[]; errors: string[] }> {
+  return invoke("list_context_folder", { folderPath });
+}
+
 export async function loadContextFile(
   filePath: string
 ): Promise<ContextResource> {

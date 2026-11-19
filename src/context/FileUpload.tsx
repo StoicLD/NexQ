@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useRef, useState } from "react";
 import { CloudUpload, Loader2 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { listContextFolder } from "../lib/ipc";
 import { useContextStore } from "../stores/contextStore";
 import { useConfigStore } from "../stores/configStore";
 import { useRagStore } from "../stores/ragStore";
@@ -10,117 +11,95 @@ export function FileUpload() {
   const contextStrategy = useConfigStore((s) => s.contextStrategy);
   const autoIndexFile = useRagStore((s) => s.autoIndexFile);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const importing = useRef(false);
+  const indexQueue = useRef(Promise.resolve());
+  const [progress, setProgress] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const processFile = useCallback(
-    async (filePath: string) => {
-      setIsProcessing(true);
-      setErrorMessage(null);
-      try {
-        const resource = await loadFile(filePath);
-        // Auto-index if RAG is active — fire and forget, doesn't block UI
-        if (contextStrategy === "local_rag") {
-          autoIndexFile(resource.id);
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setErrorMessage(msg);
-        setTimeout(() => setErrorMessage(null), 5000);
-      } finally {
-        setIsProcessing(false);
-      }
-    },
-    [loadFile, contextStrategy, autoIndexFile]
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragOver(false);
-
-      const files = e.dataTransfer?.files;
-      if (!files || files.length === 0) return;
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const filePath = (file as File & { path?: string }).path;
-        if (filePath) {
-          await processFile(filePath);
-        }
-      }
-    },
-    [processFile]
-  );
-
-  const handleBrowse = useCallback(async () => {
+  async function importFiles(source: "files" | "folder" | string[]) {
+    if (importing.current) return;
+    importing.current = true;
+    setErrorMessage(null);
+    setNotice(null);
     try {
-      const selected = await open({
-        multiple: true,
-        filters: [
-          {
-            name: "Context Files",
-            extensions: ["pdf", "txt", "md", "docx"],
-          },
-        ],
-      });
+      let files: string[];
+      let errors: string[] = [];
+      if (source === "folder") {
+        const selected = await open({ directory: true, title: "Add Context Folder" });
+        if (!selected) return;
+        setProgress("Scanning folder...");
+        const folder = await listContextFolder(selected);
+        files = folder.files;
+        errors = folder.errors;
+      } else if (source === "files") {
+        const selected = await open({
+          multiple: true,
+          filters: [{ name: "Context Files", extensions: ["pdf", "txt", "md", "docx"] }],
+        });
+        if (!selected) return;
+        files = selected;
+      } else {
+        files = source;
+      }
 
-      if (selected) {
-        const paths = Array.isArray(selected) ? selected : [selected];
-        for (const filePath of paths) {
-          if (filePath) {
-            await processFile(filePath);
+      let imported = 0;
+      for (const [index, path] of files.entries()) {
+        setProgress(`Importing file ${index + 1} of ${files.length}...`);
+        try {
+          const resource = await loadFile(path);
+          imported++;
+          if (contextStrategy === "local_rag") {
+            // Keep large folders from starting an embedding job for every file at once.
+            indexQueue.current = indexQueue.current.then(() => autoIndexFile(resource.id));
           }
+        } catch (e) {
+          errors.push(`${path}: ${String(e)}`);
         }
+      }
+      if (source === "folder") {
+        setNotice(files.length || errors.length
+          ? `Imported ${imported} of ${files.length} files.`
+          : "No supported documents found in this folder.");
+      }
+      if (errors.length) {
+        setErrorMessage(errors.join("\n"));
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setErrorMessage(msg);
-      setTimeout(() => setErrorMessage(null), 5000);
+      setErrorMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProgress(null);
+      importing.current = false;
     }
-  }, [processFile]);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(false);
+    const paths = Array.from(e.dataTransfer.files, (file) => (file as File & { path?: string }).path)
+      .filter((path): path is string => !!path);
+    if (paths.length) void importFiles(paths);
+  }
 
   return (
     <div className="w-full">
       {/* Drop zone */}
       <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
+        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+        onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
-        onClick={handleBrowse}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            handleBrowse();
-          }
-        }}
-        role="button"
-        tabIndex={0}
-        aria-label="Drop files here or click to browse"
+        aria-busy={!!progress}
         className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed transition-all duration-200 ${
           isDragOver
             ? "border-primary/60 bg-primary/5 scale-[1.01]"
             : "border-muted-foreground/20 bg-secondary/20 hover:border-muted-foreground/30 hover:bg-secondary/30"
         } px-6 py-6`}
       >
-        {isProcessing ? (
+        {progress ? (
           <>
             <Loader2 className="mb-2 h-8 w-8 animate-spin text-primary/60" />
             <p className="text-sm font-medium text-muted-foreground">
-              Processing file...
+              {progress}
             </p>
           </>
         ) : (
@@ -136,19 +115,29 @@ export function FileUpload() {
             <p className="mt-1 text-xs text-muted-foreground">
               PDF, TXT, Markdown, or DOCX
             </p>
-            <button
-              onClick={handleBrowse}
-              className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 hover:text-primary"
-            >
-              Browse Files
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void importFiles("files")}
+                className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-medium text-primary transition-colors after:absolute after:inset-0 after:rounded-xl hover:bg-primary/10"
+              >
+                Browse Files
+              </button>
+              <button
+                type="button"
+                onClick={() => void importFiles("folder")}
+                className="relative rounded-lg border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+              >
+                Browse Folder
+              </button>
+            </div>
           </>
         )}
       </div>
 
-      {/* Error toast */}
+      {notice && <p role="status" className="mt-2 text-xs text-muted-foreground">{notice}</p>}
       {errorMessage && (
-        <div className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div role="alert" className="mt-2 max-h-28 overflow-auto whitespace-pre-line break-words rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {errorMessage}
         </div>
       )}

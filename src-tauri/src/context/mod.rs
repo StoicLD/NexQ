@@ -85,18 +85,13 @@ impl ContextManager {
             .unwrap_or("")
             .to_lowercase();
 
-        let file_type = match extension.as_str() {
-            "pdf" => "pdf",
-            "txt" => "txt",
-            "md" => "md",
-            "docx" => "docx",
-            _ => {
-                return Err(format!(
-                    "Unsupported file type: .{}. Supported: .pdf, .txt, .md, .docx",
-                    extension
-                ))
-            }
-        };
+        if !file_loader::CONTEXT_EXTENSIONS.contains(&extension.as_str()) {
+            return Err(format!(
+                "Unsupported file type: .{}. Supported: .pdf, .txt, .md, .docx",
+                extension
+            ));
+        }
+        let file_type = extension.as_str();
 
         // Generate a unique resource ID
         let resource_id = Uuid::new_v4().to_string();

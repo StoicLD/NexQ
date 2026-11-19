@@ -3,6 +3,15 @@ use tauri::{command, State};
 use crate::state::AppState;
 
 #[command]
+pub async fn list_context_folder(
+    folder_path: std::path::PathBuf,
+) -> Result<crate::context::file_loader::ContextFolder, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::context::file_loader::list_folder(&folder_path))
+        .await
+        .map_err(|e| format!("Failed to scan context folder: {}", e))?
+}
+
+#[command]
 pub async fn load_context_file(
     file_path: String,
     state: State<'_, AppState>,
