@@ -9,7 +9,7 @@
 
 use async_trait::async_trait;
 use std::io::Write as IoWrite;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use tauri::AppHandle;
@@ -17,6 +17,9 @@ use tokio::sync::mpsc;
 
 use crate::audio::AudioChunk;
 use crate::stt::provider::{STTProvider, STTProviderType, TranscriptResult};
+
+#[path = "sherpa_protocol.rs"]
+mod protocol;
 
 /// How many seconds of audio to accumulate before running offline recognition.
 const BATCH_SECONDS: f32 = 3.0;
@@ -31,6 +34,16 @@ pub enum OfflineModelType {
     SenseVoice,
     /// NeMo CTC (Parakeet TDT): `--nemo-ctc-model=...`
     NemoCtc,
+}
+
+impl OfflineModelType {
+    fn arguments(self, model: &Path, tokens: &Path, language: &str, wav: &Path) -> Vec<String> {
+        let (model_flag, language) = match self {
+            Self::SenseVoice => ("--sense-voice-model", Some(language)),
+            Self::NemoCtc => ("--nemo-ctc-model", None),
+        };
+        protocol::arguments(model_flag, model, tokens, language, wav)
+    }
 }
 
 /// Messages from feed_audio to the batch processing thread.
@@ -199,39 +212,8 @@ impl STTProvider for SherpaOfflineSTT {
                         continue;
                     }
 
-                    // Build CLI arguments — use separate --flag value pairs
-                    // (not --flag=value) because sherpa-onnx's Kaldi-style
-                    // ParseOptions can misinterpret Windows paths with = format.
-                    let model_flag = match model_type {
-                        OfflineModelType::SenseVoice => "--sense-voice-model",
-                        OfflineModelType::NemoCtc => "--nemo-ctc-model",
-                    };
-                    let model_str = model_path.to_string_lossy().to_string();
-                    let tokens_str = tokens_path.to_string_lossy().to_string();
-
-                    let mut args: Vec<String> = vec![
-                        model_flag.to_string(), model_str,
-                        "--tokens".to_string(), tokens_str,
-                        "--num-threads".to_string(), "4".to_string(),
-                        "--provider".to_string(), "cpu".to_string(),
-                    ];
-
-                    // SenseVoice-specific: set language and enable ITN
-                    if matches!(model_type, OfflineModelType::SenseVoice) {
-                        let sv_lang = match language.split('-').next().unwrap_or("en") {
-                            "zh" => "zh",
-                            "ja" => "ja",
-                            "ko" => "ko",
-                            "yue" => "yue",
-                            _ => "en",
-                        };
-                        args.push("--sense-voice-language".to_string());
-                        args.push(sv_lang.to_string());
-                        args.push("--sense-voice-use-itn".to_string());
-                        args.push("true".to_string());
-                    }
-
-                    args.push(wav_path.to_string_lossy().to_string());
+                    let args =
+                        model_type.arguments(&model_path, &tokens_path, &language, &wav_path);
 
                     log::debug!("SherpaOfflineSTT: cmd={} args={:?}", binary_path.display(), args);
 
@@ -244,27 +226,11 @@ impl STTProvider for SherpaOfflineSTT {
                         .output()
                     {
                         Ok(output) => {
-                            // Parse output — sherpa-onnx-offline prints result to stderr:
-                            //   filename.wav
-                            //     text: recognized text here
                             let stderr = String::from_utf8_lossy(&output.stderr);
                             let stdout = String::from_utf8_lossy(&output.stdout);
-
-                            let mut text = String::new();
-                            // Check stderr first (sherpa-onnx prints results there)
-                            for line in stderr.lines().chain(stdout.lines()) {
-                                let trimmed = line.trim();
-                                if trimmed.starts_with("text:") || trimmed.starts_with("text :") {
-                                    text = trimmed
-                                        .trim_start_matches("text:")
-                                        .trim_start_matches("text :")
-                                        .trim()
-                                        .to_string();
-                                    break;
-                                }
-                            }
-
-                            if !text.is_empty() {
+                            if let Some(text) =
+                                protocol::recognized_text(&stderr, &stdout, output.status.success())
+                            {
                                 let timestamp_ms = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
                                     .unwrap_or_default()
@@ -303,7 +269,7 @@ impl STTProvider for SherpaOfflineSTT {
                                 segment_id += 1;
                                 segment_counter.store(segment_id, AtomicOrdering::Relaxed);
                             } else if output.status.success() {
-                                // Sidecar succeeded but no "text:" line found — log full output for debugging
+                                // Sidecar succeeded but returned no recognized text.
                                 let raw_stderr: String = stderr.chars().take(500).collect();
                                 let raw_stdout: String = stdout.chars().take(500).collect();
                                 log::warn!(
@@ -365,35 +331,8 @@ impl STTProvider for SherpaOfflineSTT {
             if !buffer.is_empty() && !stop_flag.load(AtomicOrdering::SeqCst) {
                 let wav_path = std::env::temp_dir().join("nexq_offline_stt_final.wav");
                 if write_wav(&wav_path, &buffer, SAMPLE_RATE).is_ok() && model_path.exists() {
-                    let model_flag = match model_type {
-                        OfflineModelType::SenseVoice => "--sense-voice-model",
-                        OfflineModelType::NemoCtc => "--nemo-ctc-model",
-                    };
-                    let model_str = model_path.to_string_lossy().to_string();
-                    let tokens_str = tokens_path.to_string_lossy().to_string();
-
-                    let mut args: Vec<String> = vec![
-                        model_flag.to_string(), model_str,
-                        "--tokens".to_string(), tokens_str,
-                        "--num-threads".to_string(), "4".to_string(),
-                        "--provider".to_string(), "cpu".to_string(),
-                    ];
-
-                    if matches!(model_type, OfflineModelType::SenseVoice) {
-                        let sv_lang = match language.split('-').next().unwrap_or("en") {
-                            "zh" => "zh",
-                            "ja" => "ja",
-                            "ko" => "ko",
-                            "yue" => "yue",
-                            _ => "en",
-                        };
-                        args.push("--sense-voice-language".to_string());
-                        args.push(sv_lang.to_string());
-                        args.push("--sense-voice-use-itn".to_string());
-                        args.push("true".to_string());
-                    }
-
-                    args.push(wav_path.to_string_lossy().to_string());
+                    let args =
+                        model_type.arguments(&model_path, &tokens_path, &language, &wav_path);
 
                     log::debug!("SherpaOfflineSTT: final cmd={} args={:?}", binary_path.display(), args);
 
@@ -406,34 +345,24 @@ impl STTProvider for SherpaOfflineSTT {
                     {
                         let stderr = String::from_utf8_lossy(&output.stderr);
                         let stdout = String::from_utf8_lossy(&output.stdout);
-                        for line in stderr.lines().chain(stdout.lines()) {
-                            let trimmed = line.trim();
-                            if trimmed.starts_with("text:") || trimmed.starts_with("text :") {
-                                let text = trimmed
-                                    .trim_start_matches("text:")
-                                    .trim_start_matches("text :")
-                                    .trim()
-                                    .to_string();
-                                if !text.is_empty() {
-                                    let _ = result_tx.blocking_send(TranscriptResult {
-                                        text,
-                                        is_final: true,
-                                        confidence: 1.0,
-                                        timestamp_ms: std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap_or_default()
-                                            .as_millis()
-                                            as u64,
-                                        speaker: None,
-                                        language: Some(language.clone()),
-                                        segment_id: Some(segment_id.to_string()),
-                                        duration_ms: None,
-                                        speaker_tag: None,
-                                        turn: None,
-                                    });
-                                }
-                                break;
-                            }
+                        if let Some(text) =
+                            protocol::recognized_text(&stderr, &stdout, output.status.success())
+                        {
+                            let _ = result_tx.blocking_send(TranscriptResult {
+                                text,
+                                is_final: true,
+                                confidence: 1.0,
+                                timestamp_ms: std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as u64,
+                                speaker: None,
+                                language: Some(language.clone()),
+                                segment_id: Some(segment_id.to_string()),
+                                duration_ms: None,
+                                speaker_tag: None,
+                                turn: None,
+                            });
                         }
                     }
                     let _ = std::fs::remove_file(&wav_path);
